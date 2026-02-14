@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Tap 10s Challenge</title>
+  <title>10s Omae Challenge</title>
   <style>
     html,body{margin:0; height:100%; background:#111; color:#fff; font-family:system-ui, sans-serif;}
     #wrap{display:flex; flex-direction:column; height:100%;}
@@ -17,8 +17,8 @@
 <body>
 <div id="wrap">
   <div id="topbar">
-    <b>タップ10秒</b>
-    <span id="state">STARTを押してね</span>
+    <b>10秒おまえチャレンジ</b>
+    <span id="state">あひるを押してね</span>
   </div>
   <canvas id="c"></canvas>
   <div id="hint">操作：画面をタップ。もう一度長押しでリトライ。</div>
@@ -40,6 +40,29 @@
   window.addEventListener('resize', resize, {passive:true});
   resize();
 
+  // ===== 画像ロード（キャッシュ対策込み） =====
+const buttonImg = new Image();
+let buttonImgReady = false;
+
+function markReady() {
+  if (!buttonImgReady) {
+    buttonImgReady = true;
+    console.log("button image ready:", buttonImg.src);
+  }
+}
+
+buttonImg.onload = markReady;
+buttonImg.onerror = () => console.warn("画像が読めない:", buttonImg.src);
+
+// onload より先に src を入れない！
+buttonImg.src = new URL("./img/ahiru.png", location.href).href;
+
+// キャッシュで onload が飛ばない場合の保険
+if (buttonImg.complete && buttonImg.naturalWidth > 0) {
+  markReady();
+}
+
+
   // ===== ゲーム状態 =====
   const UI = {
     state: document.getElementById('state')
@@ -49,6 +72,22 @@
   let score = 0;
   let startTime = 0;
   const DURATION = 10_000; // 10秒
+
+  // ===== 評価のしきい値（ここだけ触れば調整できる） =====
+  const SCORE_TIER = {
+  great: 55, // これ以上なら最高 やるじゃん
+  good: 25,  // これ以上なら良い ふ～ん
+  // それ未満はもう少し　やれよ
+  };
+
+  let resultComment = "";
+
+  function commentForScore(s) {
+    if (s >= SCORE_TIER.great) return "やるじゃん";
+    if (s >= SCORE_TIER.good)  return "ふ～ん";
+    return "やれよ";
+  }
+
 
   // タップ対象（大きな丸ボタン）
   const btn = { x: 0, y: 0, r: 0 };
@@ -81,12 +120,13 @@
     phase = "playing";
     score = 0;
     startTime = performance.now();
-    UI.state.textContent = "タップ！タップ！";
+    UI.state.textContent = "おまえ！おまえ！";
   }
 
   function finishGame() {
     phase = "result";
-    UI.state.textContent = `結果：${score} 回（長押しでリトライ）`;
+    resultComment = commentForScore(score);
+    UI.state.textContent = `結果：${score} 回（長押しでもういちどおまえ）`;
   }
 
   function onTap(ev) {
@@ -113,7 +153,7 @@
     if (phase !== "result") return;
     pressTimer = setTimeout(() => {
       phase = "idle";
-      UI.state.textContent = "STARTを押してね";
+      UI.state.textContent = "あひるを押してね";
     }, 450);
   }
   function onUp(ev) {
@@ -130,8 +170,16 @@
 
   // ===== 描画 =====
   function draw(now) {
-    const w = canvas.getBoundingClientRect().width;
-    const h = canvas.getBoundingClientRect().height;
+    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    const w = canvas.width / dpr;   // ← 内部描画と一致する幅
+    const h = canvas.height / dpr;  // ← 内部描画と一致する高さ
+
+
+    const label =
+      phase === "idle" ? "やる？" :
+      phase === "playing" ? "おまえ!" :
+      "おわり";
+
 
     // 背景
     ctx.clearRect(0,0,w,h);
@@ -147,33 +195,86 @@
     }
 
     // 上部HUD
+    ctx.save();
     ctx.fillStyle = "rgba(255,255,255,0.9)";
     ctx.font = "16px system-ui";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    
     ctx.fillText(`SCORE: ${score}`, 14, 26);
 
     ctx.fillStyle = "rgba(255,255,255,0.75)";
     ctx.fillText(`TIME: ${(tLeft/1000).toFixed(1)}s`, 14, 48);
+    ctx.restore();
 
     // ボタン
-    const grad = ctx.createRadialGradient(btn.x, btn.y, btn.r*0.2, btn.x, btn.y, btn.r);
-    grad.addColorStop(0, phase==="playing" ? "#ffe27a" : "#9be7ff");
-    grad.addColorStop(1, "#2b2b2b");
+    // ===== ボタン（四角画像：透過PNGそのまま） =====
+    const size = btn.r * 2;                 // 既存の半径(btn.r)を流用してサイズ決定
+    const x = btn.x - size / 2;
+    const y = btn.y - size / 2;
 
-    ctx.beginPath();
-    ctx.arc(btn.x, btn.y, btn.r, 0, Math.PI*2);
-    ctx.fillStyle = grad;
-    ctx.fill();
+    // 画像が未ロードなら仮表示
+    if (!buttonImgReady) {
+      ctx.fillStyle = "#2b2b2b";
+      ctx.fillRect(x, y, size, size);
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.font = "16px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("loading...", btn.x, btn.y);
+    } else {
+      // PNGの透過はこのまま描けばOK
+      ctx.drawImage(buttonImg, x, y, size, size);
+    }
+
+    // ===== 結果オーバーレイ（写真の上にだけ表示） =====
+    if (phase === "result") {
+      // 画像ボタンの四角の範囲（今の描画と同じ x,y,size を使う）
+      // x, y, size がこのスコープに無い場合は同じ計算をここで再定義してOK
+     const pad = size * 0.06;
+
+     // 下側に2行（スコア＋コメント）
+      const boxH = size * 0.34;
+      const boxY = y + size - boxH;
+
+      // 半透明の黒背景（文字が読めるように）
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(x, boxY, size, boxH);
+
+      // スコア
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      ctx.font = `bold ${Math.max(16, Math.floor(size * 0.13))}px system-ui`;
+      ctx.fillText(`SCORE: ${score}`, btn.x, boxY + boxH * 0.35);
+
+      // コメント
+      ctx.font = `${Math.max(14, Math.floor(size * 0.10))}px system-ui`;
+      ctx.fillText(resultComment, btn.x, boxY + boxH * 0.72); 
+    }
+
+
+    // // 視認性のために枠（任意）
+    // ctx.lineWidth = 3;
+    // ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    // ctx.strokeRect(x, y, size, size);
+
+    // // ラベル文字を画像の上に出す（不要ならこのブロック消してOK）
+    // ctx.fillStyle = "rgba(0,0,0,0.55)";
+    // ctx.fillRect(x, y + size * 0.68, size, size * 0.32);
+    // ctx.fillStyle = "#fff";
+    // ctx.font = `bold ${Math.max(16, Math.floor(size * 0.12))}px system-ui`;
+    // ctx.textAlign = "center";
+    // ctx.textBaseline = "middle";
+    // ctx.fillText(label, btn.x, y + size * 0.84);
+
 
     // ラベル文字
     ctx.fillStyle = "#000";
     ctx.font = `bold ${Math.max(18, Math.floor(btn.r*0.28))}px system-ui`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-
-    const label =
-      phase === "idle" ? "START" :
-      phase === "playing" ? "TAP!" :
-      "DONE";
 
     ctx.fillText(label, btn.x, btn.y);
 
@@ -182,8 +283,8 @@
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "rgba(255,255,255,0.7)";
     ctx.font = "13px system-ui";
-    if (phase === "idle") ctx.fillText("丸を押してスタート", w/2, h*0.86);
-    if (phase === "playing") ctx.fillText("丸だけを連打！", w/2, h*0.86);
+    if (phase === "idle") ctx.fillText("あひるを押してスタート", w/2, h*0.86);
+    if (phase === "playing") ctx.fillText("あひるを連打！", w/2, h*0.86);
     if (phase === "result") ctx.fillText("長押しでリトライ", w/2, h*0.86);
 
     requestAnimationFrame(draw);
