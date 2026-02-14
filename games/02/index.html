@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>神経衰弱 1枚版</title>
+  <style>
+    :root{
+      --bg:#0b1020; --panel:#121a33; --card:#0f1730; --text:#e9ecff;
+      --accent:#6ee7ff; --good:#7CFF9A; --bad:#FF6E8A;
+    }
+    html,body{ height:100%; margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+    body{
+      overflow:hidden;              /* スクロール禁止 */
+      touch-action: none;           /* 画面ドラッグでスクロール/ズームしない */
+      overscroll-behavior: none;    /* iOSのバウンス抑制 */
+      -webkit-user-select:none; user-select:none;
+    }
+    .wrap{
+      height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      box-sizing:border-box;
+    }
+    .panel{
+      width:min(520px, 100%);
+      background:var(--panel);
+      border-radius:18px;
+      padding:16px;
+      box-sizing:border-box;
+      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+    }
+    .top{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:12px;
+    }
+    .title{ font-weight:800; letter-spacing:.02em; }
+    .stats{ font-size:14px; opacity:.9; display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;}
+    .badge{ padding:4px 10px; background:rgba(255,255,255,.06); border-radius:999px; }
+    .cardArea{
+      display:flex;
+      justify-content:center;
+      margin:14px 0 10px;
+    }
+    .card{
+      width:min(280px, 70vw);
+      aspect-ratio: 1 / 1;
+      border-radius:22px;
+      background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.10);
+      transform: translateZ(0);
+    }
+    .cardFace{
+      font-size:min(110px, 22vw);
+      line-height:1;
+      filter: drop-shadow(0 10px 18px rgba(0,0,0,.35));
+      transition: transform .18s ease, opacity .18s ease;
+    }
+    .card.isHidden .cardFace{
+      opacity:0;
+      transform: scale(.92);
+    }
+    .hint{
+      font-size:13px;
+      opacity:.85;
+      margin:8px 0 12px;
+      min-height:1.3em;
+    }
+    .btnRow{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    button{
+      flex:1 1 160px;
+      border:0;
+      border-radius:14px;
+      padding:14px 14px;
+      font-size:16px;
+      font-weight:800;
+      color:var(--text);
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.12);
+      cursor:pointer;
+      transition: transform .08s ease, background .12s ease;
+      touch-action: manipulation; /* ボタン上だけはタップ最適化 */
+    }
+    button:active{ transform: scale(.98); }
+    button.primary{ background: rgba(110,231,255,.14); border-color: rgba(110,231,255,.32); }
+    button.ghost{ background: rgba(255,255,255,.06); }
+    .footerRow{
+      display:flex;
+      gap:10px;
+      margin-top:10px;
+      flex-wrap:wrap;
+    }
+    .msgGood{ color: var(--good); }
+    .msgBad{ color: var(--bad); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="top">
+        <div class="title">神経衰弱 1枚版（1-back）</div>
+        <div class="stats">
+          <div class="badge">Score: <span id="score">0</span></div>
+          <div class="badge">Streak: <span id="streak">0</span></div>
+          <div class="badge">Round: <span id="round">0</span></div>
+        </div>
+      </div>
+
+      <div class="cardArea">
+        <div id="card" class="card isHidden" aria-label="card">
+          <div id="cardFace" class="cardFace">?</div>
+        </div>
+      </div>
+
+      <div id="hint" class="hint">「同じ / 違う」で回答。最初の1回は練習です。</div>
+
+      <div class="btnRow">
+        <button id="sameBtn" class="primary">同じ</button>
+        <button id="diffBtn" class="primary">違う</button>
+      </div>
+
+      <div class="footerRow">
+        <button id="startBtn" class="ghost">スタート / 次へ</button>
+        <button id="resetBtn" class="ghost">リセット</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // 使う絵柄（増やしてOK）
+  const SYMBOLS = ["🍋","🍓","🍇","🍒","🍊","🍉","🥝","🍍","🍌","🍑"];
+  const SHOW_MS = 650;     // 表を見せる時間
+  const LOCK_MS = 150;     // 連打防止
+
+  const el = {
+    card: document.getElementById("card"),
+    face: document.getElementById("cardFace"),
+    hint: document.getElementById("hint"),
+    score: document.getElementById("score"),
+    streak: document.getElementById("streak"),
+    round: document.getElementById("round"),
+    same: document.getElementById("sameBtn"),
+    diff: document.getElementById("diffBtn"),
+    start: document.getElementById("startBtn"),
+    reset: document.getElementById("resetBtn"),
+  };
+
+  // 状態
+  let prev = null;         // 直前の絵柄
+  let curr = null;         // 現在の絵柄
+  let waitingAnswer = false;
+  let locked = false;
+
+  let score = 0, streak = 0, round = 0;
+
+  // iOS対策：ダブルタップズーム等の抑制（必要なら）
+  document.addEventListener("gesturestart", e => e.preventDefault(), { passive:false });
+
+  function randSymbol() {
+    return SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+  }
+
+  // 「同じ」が出る確率を調整（ここを変えると難易度が変わる）
+  function nextSymbol() {
+    if (prev && Math.random() < 0.35) return prev; // 35%で同じ
+    let s = randSymbol();
+    // prevと違うのをなるべく選ぶ
+    if (prev) {
+      let tries = 0;
+      while (s === prev && tries < 10) { s = randSymbol(); tries++; }
+    }
+    return s;
+  }
+
+  function setHint(msg, cls="") {
+    el.hint.className = "hint " + cls;
+    el.hint.textContent = msg;
+  }
+
+  function updateStats() {
+    el.score.textContent = score;
+    el.streak.textContent = streak;
+    el.round.textContent = round;
+  }
+
+  async function showCard(symbol) {
+    el.face.textContent = symbol;
+    el.card.classList.remove("isHidden");
+    await wait(SHOW_MS);
+    el.card.classList.add("isHidden");
+  }
+
+  function wait(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+  async function nextRound() {
+    if (locked) return;
+    locked = true;
+    setTimeout(() => locked = false, LOCK_MS);
+
+    // 1ラウンド進める
+    round++;
+    prev = curr;
+    curr = nextSymbol();
+    updateStats();
+
+    // 1回目は練習扱い（比較対象がない）
+    if (!prev) {
+      setHint("まず絵柄を覚えてね。次のラウンドから判定開始！", "");
+      waitingAnswer = false;
+      await showCard(curr);
+      setHint("「スタート / 次へ」を押して次へ。", "");
+      return;
+    }
+
+    waitingAnswer = false;
+    setHint("絵柄を見て…（伏せたあとに回答）", "");
+    await showCard(curr);
+
+    waitingAnswer = true;
+    setHint("前と同じ？ 違う？", "");
+  }
+
+  function judge(userSaysSame) {
+    if (!waitingAnswer) return;
+    waitingAnswer = false;
+
+    const isSame = (curr === prev);
+    const ok = (userSaysSame === isSame);
+
+    if (ok) {
+      score++;
+      streak++;
+      setHint("正解！「スタート / 次へ」で次のラウンドへ。", "msgGood");
+    } else {
+      streak = 0;
+      setHint(`不正解…（答えは「${isSame ? "同じ" : "違う"}」）`, "msgBad");
+    }
+    updateStats();
+  }
+
+  function resetAll() {
+    prev = null; curr = null;
+    waitingAnswer = false;
+    score = 0; streak = 0; round = 0;
+    el.face.textContent = "?";
+    el.card.classList.add("isHidden");
+    updateStats();
+    setHint("「スタート / 次へ」で開始。最初の1回は練習です。", "");
+  }
+
+  // 操作
+  el.start.addEventListener("click", nextRound);
+  el.same.addEventListener("click", () => judge(true));
+  el.diff.addEventListener("click", () => judge(false));
+  el.reset.addEventListener("click", resetAll);
+
+  // キーボード（PC向け）
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") nextRound();
+    if (e.key === "ArrowLeft") judge(true);
+    if (e.key === "ArrowRight") judge(false);
+  });
+
+  resetAll();
+})();
+</script>
+</body>
+</html>
