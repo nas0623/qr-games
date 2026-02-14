@@ -40,7 +40,7 @@
 <body>
 <div id="wrap">
   <div id="topbar">
-    <b>10秒おまえチャレンジ</b>
+    <b>5秒おまえチャレンジ</b>
     <span id="state">あひるを押してね</span>
   </div>
   <canvas id="c"></canvas>
@@ -94,7 +94,7 @@ if (buttonImg.complete && buttonImg.naturalWidth > 0) {
   let phase = "idle"; // idle -> playing -> result
   let score = 0;
   let startTime = 0;
-  const DURATION = 10_000; // 10秒
+  const DURATION = 5_000; // 5秒
 
   let isPressed = false;
   let pressOnButton = false;
@@ -103,8 +103,8 @@ if (buttonImg.complete && buttonImg.naturalWidth > 0) {
 
   // ===== 評価のしきい値（ここだけ触れば調整できる） =====
   const SCORE_TIER = {
-  great: 55, // これ以上なら最高 やるじゃん
-  good: 25,  // これ以上なら良い ふ～ん
+  great: 30, // これ以上なら最高 やるじゃん
+  good: 10,  // これ以上なら良い ふ～ん
   // それ未満はもう少し　やれよ
   };
 
