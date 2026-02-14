@@ -86,6 +86,11 @@ if (buttonImg.complete && buttonImg.naturalWidth > 0) {
   let startTime = 0;
   const DURATION = 10_000; // 10秒
 
+  let isPressed = false;
+  let pressOnButton = false;
+  const PRESS_SCALE = 0.94; // 押し込み量（0.90〜0.97くらいで好み調整）
+
+
   // ===== 評価のしきい値（ここだけ触れば調整できる） =====
   const SCORE_TIER = {
   great: 55, // これ以上なら最高 やるじゃん
@@ -163,6 +168,11 @@ if (buttonImg.complete && buttonImg.naturalWidth > 0) {
   let pressTimer = null;
   function onDown(ev) {
     ev.preventDefault();
+
+    const p = getPos(ev);
+    pressOnButton = hitButton(p);   // ★押した場所がボタン内か
+    isPressed = pressOnButton;      // ★ボタン内のときだけ押し込みON
+ 
     if (phase !== "result") return;
     pressTimer = setTimeout(() => {
       phase = "idle";
@@ -171,6 +181,8 @@ if (buttonImg.complete && buttonImg.naturalWidth > 0) {
   }
   function onUp(ev) {
     ev.preventDefault();
+    isPressed = false;
+    pressOnButton = false;
     if (pressTimer) clearTimeout(pressTimer);
     pressTimer = null;
   }
@@ -227,17 +239,21 @@ if (buttonImg.complete && buttonImg.naturalWidth > 0) {
     const y = btn.y - size / 2;
 
     // 画像が未ロードなら仮表示
+    const scale = pressOnButton ? PRESS_SCALE : 1.0;
+    const drawSize = size * scale;
+    const dx = btn.x - drawSize / 2;
+    const dy = btn.y - drawSize / 2;
+
     if (!buttonImgReady) {
       ctx.fillStyle = "#2b2b2b";
-      ctx.fillRect(x, y, size, size);
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.font = "16px system-ui";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("loading...", btn.x, btn.y);
+      ctx.fillRect(dx, dy, drawSize, drawSize);
     } else {
-      // PNGの透過はこのまま描けばOK
-      ctx.drawImage(buttonImg, x, y, size, size);
+      ctx.drawImage(buttonImg, dx, dy, drawSize, drawSize);
+    }
+
+    if (isPressed) {
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.fillRect(dx, dy, drawSize, drawSize);
     }
 
     // ===== 結果オーバーレイ（写真の上にだけ表示） =====
