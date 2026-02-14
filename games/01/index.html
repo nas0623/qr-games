@@ -154,7 +154,8 @@ if (buttonImg.complete && buttonImg.naturalWidth > 0) {
   function finishGame() {
     phase = "result";
     resultComment = commentForScore(score);
-    UI.state.textContent = `結果：${score} 回（長押しでもういちどおまえ）`;
+    UI.state.textContent = `ありがとう`;
+//    UI.state.textContent = `結果：${score} 回（長押しでもういちどおまえ）`;
   }
 
   function onTap(ev) {
@@ -322,7 +323,7 @@ if (buttonImg.complete && buttonImg.naturalWidth > 0) {
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "rgba(255,255,255,0.7)";
     ctx.font = "13px system-ui";
-    if (phase === "idle") ctx.fillText("あひるを押してスタート", w/2, h*0.86);
+    if (phase === "idle") ctx.fillText("あひるを叩いてスタート", w/2, h*0.86);
     if (phase === "playing") ctx.fillText("あひるを連打！", w/2, h*0.86);
     if (phase === "result") ctx.fillText("長押しでリトライ", w/2, h*0.86);
 
